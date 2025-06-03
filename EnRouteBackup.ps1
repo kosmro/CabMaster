@@ -1,5 +1,18 @@
+###########
+# EnRoute Backup v1.1
+# By Robert Kosmac
+#
+# This script will create a backup of EnRoute or EzyNest core files.
+# These files are typically used in migrations and are required should
+# anything go wrong.
+#
+# If Execution Policy is an issue, run from the CMD with the following:
+# powershell.exe -executionpolicy bypass -file “EnRouteBackup.ps1”
+#
+###########
+
 # Define base directories to search in
-$searchDirs = @("C:\", "C:\AllMasterSoftware\")
+$searchDirs = @("C:\")
 $folderPatterns = "EnRoute*", "EzyNest*"
 
 function Get-InstallationPaths {
@@ -10,6 +23,7 @@ function Get-InstallationPaths {
 
     $installPaths = @()
 
+    # This will search in the folders, down to 2 folder levels
     foreach ($baseDir in $baseDirs) {
         if (-not (Test-Path $baseDir)) { continue }
 
@@ -40,11 +54,13 @@ function Backup-Version {
         [string]$sourcePath,
         [string]$destinationFolder
     )
-
+    
+    # These are the IMPORTANT files and folders.
+    # More can be added here if required later.
     $itemsToBackup = @(
         "AutoTP",
         "NDrivers",
-        "EnRoutePrefereneces.XML",
+        "EnRoutePreferences.xml",
         "StrategyTemplates.ini",
         "ToolLibrary.ini"
     )
