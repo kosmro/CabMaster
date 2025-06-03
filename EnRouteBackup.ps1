@@ -1,4 +1,4 @@
-###########
+###
 # EnRoute Backup v1.1
 # By Robert Kosmac
 #
@@ -9,12 +9,19 @@
 # If Execution Policy is an issue, run from the CMD with the following:
 # powershell.exe -executionpolicy bypass -file “EnRouteBackup.ps1”
 #
-###########
+###
 
+######################## VARIABLES ########################
 # Define base directories to search in
 $searchDirs = @("C:\")
 $folderPatterns = "EnRoute*", "EzyNest*"
 
+# List of file types to ignore
+$excludedExtensions = @(".exe", ".dll")
+###########################################################
+
+
+# Search and output a list of found Install Paths
 function Get-InstallationPaths {
     param (
         [string[]]$baseDirs,
@@ -49,12 +56,14 @@ function Get-InstallationPaths {
     return $installPaths
 }
 
+# Create a copy of the selected version to Backup
 function Backup-Version {
     param (
         [string]$sourcePath,
-        [string]$destinationFolder
+        [string]$destinationFolder,
+        [string[]]$excludedExtensions
     )
-    
+
     # These are the IMPORTANT files and folders.
     # More can be added here if required later.
     $itemsToBackup = @(
@@ -71,13 +80,39 @@ function Backup-Version {
 
     foreach ($item in $itemsToBackup) {
         $source = Join-Path $sourcePath $item
+
         if (Test-Path $source) {
-            Copy-Item -Path $source -Destination $versionBackupPath -Recurse -Force
+            if (Test-Path $source -PathType Container) {
+                # It's a folder – copy recursively, excluding certain file types
+                Get-ChildItem -Path $source -Recurse -File | Where-Object {
+                    $excludedExtensions -notcontains $_.Extension.ToLower()
+                } | ForEach-Object {
+                    $relativePath = $_.FullName.Substring($source.Length).TrimStart('\')
+                    $destPath = Join-Path $versionBackupPath $item
+                    $fullDestPath = Join-Path $destPath $relativePath
+
+                    $fullDestDir = Split-Path $fullDestPath -Parent
+                    if (-not (Test-Path $fullDestDir)) {
+                        New-Item -ItemType Directory -Path $fullDestDir -Force | Out-Null
+                    }
+
+                    Copy-Item -Path $_.FullName -Destination $fullDestPath -Force
+                }
+            } else {
+                # It's a file – only copy if not excluded
+                if ($excludedExtensions -notcontains ([System.IO.Path]::GetExtension($source).ToLower())) {
+                    Copy-Item -Path $source -Destination $versionBackupPath -Force
+                } else {
+                    Write-Host "Skipping excluded file: $item" -ForegroundColor Yellow
+                }
+            }
         } else {
             Write-Host "Warning: $item not found in $sourcePath" -ForegroundColor Yellow
         }
     }
 }
+
+
 
 # MAIN EXECUTION
 
@@ -112,7 +147,7 @@ New-Item -Path $tempStaging -ItemType Directory -Force | Out-Null
 if ($choice -eq 'A' -or $choice -eq 'a') {
     # Backup all versions
     foreach ($install in $installPaths) {
-        Backup-Version -sourcePath $install.FullName -destinationFolder $tempStaging
+        Backup-Version -sourcePath $install.FullName -destinationFolder $tempStaging -excludedExtensions $excludedExtensions
     }
 
     $zipName = "FullBackup_EZER_$timestamp.zip"
@@ -123,7 +158,7 @@ if ($choice -eq 'A' -or $choice -eq 'a') {
     $selectedPath = $installPaths[$choice].FullName
     $folderName = Split-Path $selectedPath -Leaf
 
-    Backup-Version -sourcePath $selectedPath -destinationFolder $tempStaging
+    Backup-Version -sourcePath $selectedPath -destinationFolder $tempStaging -excludedExtensions $excludedExtensions
 
     $zipName = "$folderName" + "_$timestamp.zip"
     $zipPath = Join-Path $backupFolder $zipName
