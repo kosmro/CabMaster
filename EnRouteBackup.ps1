@@ -72,51 +72,48 @@ function Backup-Version {
         [string]$mode  # "1" = important only, "2" = full
     )
 
-    $importantItems = @(
-        "AutoTP",
-        "NDrivers",
-        "EnRoutePreferences.xml",
-        "StrategyTemplates.ini",
-        "ToolLibrary.ini"
-    )
-
-    $itemsToBackup = if ($mode -eq "1") {
-        $importantItems
-    } else {
-        Get-ChildItem -Path $sourcePath -Recurse -File | ForEach-Object {
-            $_.FullName.Substring($sourcePath.Length).TrimStart('\').Split('\')[0]
-        } | Sort-Object -Unique
-    }
-
     $folderName = Split-Path $sourcePath -Leaf
     $versionBackupPath = Join-Path $destinationFolder $folderName
     New-Item -Path $versionBackupPath -ItemType Directory -Force | Out-Null
 
-    # Pre-count eligible files
-    $localFiles = @()
-    foreach ($item in $itemsToBackup) {
-        $source = Join-Path $sourcePath $item
-        if (Test-Path $source -PathType Container) {
-            $localFiles += Get-ChildItem -Path $source -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
-                $excludedExtensions -notcontains $_.Extension.ToLower()
-            }
-        } elseif (Test-Path $source -PathType Leaf) {
-            if ($excludedExtensions -notcontains ([System.IO.Path]::GetExtension($source).ToLower())) {
-                $localFiles += Get-Item $source
+    # Get files based on mode
+    if ($mode -eq "2") {
+        # Full backup - get all files
+        $localFiles = Get-ChildItem -Path $sourcePath -Recurse -File -ErrorAction SilentlyContinue
+    } else {
+        # Important files only
+        $importantItems = @(
+            "AutoTP",
+            "NDrivers",
+            "EnRoutePreferences.xml",
+            "StrategyTemplates.ini",
+            "ToolLibrary.ini"
+        )
+
+        $localFiles = @()
+        foreach ($item in $importantItems) {
+            $source = Join-Path $sourcePath $item
+            if (Test-Path $source -PathType Container) {
+                $localFiles += Get-ChildItem -Path $source -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
+                    $excludedExtensions -notcontains $_.Extension.ToLower()
+                }
+            } elseif (Test-Path $source -PathType Leaf) {
+                if ($excludedExtensions -notcontains ([System.IO.Path]::GetExtension($source).ToLower())) {
+                    $localFiles += Get-Item $source
+                }
             }
         }
     }
 
     $global:copyTotal += $localFiles.Count
 
-    # Copy files with progress
     foreach ($file in $localFiles) {
         $relativePath = $file.FullName.Substring($sourcePath.Length).TrimStart('\')
         $destPath = Join-Path $versionBackupPath $relativePath
         $destDir = Split-Path $destPath -Parent
 
         if (-not (Test-Path $destDir)) {
-            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+            New-Item -Path $destDir -ItemType Directory -Force | Out-Null
         }
 
         Copy-Item -Path $file.FullName -Destination $destPath -Force
